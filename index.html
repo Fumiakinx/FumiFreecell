@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>🃏 フリーセル | FUMI FREECELL</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-start: #0a0a0c;
+      --bg-end: #14141f;
+      --card-bg: rgba(255, 255, 255, 0.03);
+      --card-border: rgba(255, 255, 255, 0.1);
+      --accent-color: #2196F3;
+      --accent-glow: rgba(33, 150, 243, 0.4);
+      --gold-color: #FFD700;
+      --text-main: #ffffff;
+      --text-muted: #8a8a9e;
+      --felt-color: rgba(18, 54, 38, 0.6);
+      --slot-border: rgba(255, 255, 255, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      font-family: 'Inter', 'Outfit', sans-serif;
+      background: linear-gradient(135deg, var(--bg-start) 0%, var(--bg-end) 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* 上部ヘッダー・ナビゲーション */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 24px;
+      background: rgba(10, 10, 12, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #4CAF50 0%, #2196F3 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .btn-back-portal {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      transition: all 0.2s ease;
+    }
+
+    .btn-back-portal:hover {
+      color: #fff;
+      background: rgba(33, 150, 243, 0.15);
+      border-color: var(--accent-color);
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .stat-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+    }
+
+    .stat-badge .val {
+      font-weight: 800;
+      color: var(--gold-color);
+    }
+
+    .btn-action {
+      background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+      color: white;
+      border: none;
+      padding: 7px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+      transition: all 0.2s ease;
+    }
+
+    .btn-action:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(33, 150, 243, 0.5);
+    }
+
+    /* メインコンテナ */
+    #main-container {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 57px);
+      position: relative;
+    }
+
+    /* ゲームエリア (左側) - Unity風のクリーンなフェルトグリーン背景 */
+    #game-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 20px;
+      position: relative;
+      background: #1b5e37; /* Unityと同じマットなフェルトグリーン */
+      overflow: hidden;
+    }
+
+    /* ゲーム盤面グリッド */
+    .board-wrap {
+      width: 100%;
+      max-width: 980px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      position: relative;
+    }
+
+    /* トップセル (フリーセル4枠 + ホームセル4枠) */
+    .top-cells-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr) 20px repeat(4, 1fr);
+      gap: 10px;
+      width: 100%;
+    }
+
+    .cell-slot {
+      aspect-ratio: 5 / 7;
+      background: rgba(0, 0, 0, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s, border-color 0.2s;
+    }
+
+    /* FREE CELL文字表示 */
+    .cell-slot.freecell::before {
+      content: 'FREE\A CELL';
+      white-space: pre-wrap;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.25;
+      color: rgba(255, 255, 255, 0.18);
+      letter-spacing: 0.5px;
+      pointer-events: none;
+    }
+
+    /* ホームセルのスートシンボル */
+    .cell-slot.homecell::before {
+      font-size: 28px;
+      color: rgba(255, 255, 255, 0.22);
+      pointer-events: none;
+    }
+    .cell-slot.homecell[data-suit="hearts"]::before { content: '♥'; }
+    .cell-slot.homecell[data-suit="clubs"]::before { content: '♣'; }
+    .cell-slot.homecell[data-suit="diamonds"]::before { content: '♦'; }
+    .cell-slot.homecell[data-suit="spades"]::before { content: '♠'; }
+
+    .cell-slot.highlight {
+      border-color: #00e676 !important;
+      background: rgba(0, 230, 118, 0.2) !important;
+    }
+
+    .cell-slot-divider {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* タブロー列 (場札8列) */
+    .tableau-row {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 10px;
+      width: 100%;
+      flex: 1;
+      position: relative;
+    }
+
+    .tableau-column {
+      position: relative;
+      height: 100%;
+      background: transparent;
+      border: none;
+    }
+
+    .tableau-column.highlight {
+      background: rgba(0, 230, 118, 0.1) !important;
+      border-color: #00e676 !important;
+    }
+
+    /* トランプカード */
+    .card {
+      position: absolute;
+      width: 100%;
+      aspect-ratio: 5 / 7;
+      border-radius: 6px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+      cursor: grab;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      touch-action: none;
+    }
+
+    .card img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 6px;
+      pointer-events: none;
+    }
+
+    .card:hover {
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.7), 0 0 8px rgba(255, 255, 255, 0.2);
+    }
+
+    .card.dragging {
+      opacity: 0.92;
+      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.8), 0 0 16px var(--accent-glow);
+      cursor: grabbing;
+      z-index: 9999 !important;
+      transition: none;
+    }
+
+    /* 右側ランキングサイドバー */
+    #sidebar-ranking {
+      width: 320px;
+      background: rgba(14, 14, 20, 0.85);
+      backdrop-filter: blur(16px);
+      border-left: 1px solid var(--card-border);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 16px;
+      z-index: 50;
+    }
+
+    .sidebar-header {
+      margin-bottom: 16px;
+    }
+
+    .sidebar-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .sidebar-title .icon {
+      color: var(--gold-color);
+    }
+
+    /* プレイヤーネーム入力ボックス */
+    .player-profile-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      margin-bottom: 16px;
+    }
+
+    .profile-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-color);
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .player-name-input {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      color: #fff;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-weight: 600;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .player-name-input:focus {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+
+    /* ランキングリストテーブル */
+    .ranking-list-wrap {
+      flex: 1;
+      overflow-y: auto;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--card-border);
+    }
+
+    .ranking-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .ranking-table th {
+      position: sticky;
+      top: 0;
+      background: rgba(20, 20, 28, 0.95);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .ranking-table td {
+      padding: 10px 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    }
+
+    .rank-1 { color: #FFD700; font-weight: 800; }
+    .rank-2 { color: #C0C0C0; font-weight: 800; }
+    .rank-3 { color: #CD7F32; font-weight: 800; }
+
+    /* クリア・メッセージモーダル */
+    .overlay-modal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .overlay-modal.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-content {
+      background: linear-gradient(135deg, #181824 0%, #101018 100%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 24px;
+      padding: 36px 48px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+      transform: scale(0.9);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      max-width: 420px;
+    }
+
+    .overlay-modal.active .modal-content {
+      transform: scale(1);
+    }
+
+    .modal-title {
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+
+    .modal-streak-count {
+      font-size: 40px;
+      font-weight: 800;
+      color: var(--gold-color);
+      text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+      margin: 16px 0;
+    }
+
+    @media (max-width: 900px) {
+      #main-container {
+        flex-direction: column;
+        overflow-y: auto;
+      }
+      #sidebar-ranking {
+        width: 100%;
+        height: auto;
+        border-left: none;
+        border-top: 1px solid var(--card-border);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ヘッダー -->
+  <header>
+    <div class="brand">
+      <a href="https://fumiakinx.github.io/" id="btn-back-portal" class="btn-back-portal">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        PORTAL TOP
+      </a>
+      <h1>FUMI FREECELL</h1>
+    </div>
+    <div class="header-controls">
+      <div class="stat-badge">
+        <span>GAME:</span>
+        <span id="game-number-display" class="val">#1</span>
+      </div>
+      <div class="stat-badge">
+        <span>🔥 連勝:</span>
+        <span id="streak-display" class="val">0</span>
+      </div>
+      <button id="btn-restart" class="btn-action">🔄 新規ゲーム</button>
+    </div>
+  </header>
+
+  <!-- メインエリア -->
+  <div id="main-container">
+    <!-- ゲーム画面 (左) -->
+    <div id="game-area">
+      <div class="board-wrap">
+        <!-- 上部セル (フリーセル4枠 + ホームセル4枠) -->
+        <div class="top-cells-row">
+          <div class="cell-slot freecell" data-type="freecell" data-index="0"></div>
+          <div class="cell-slot freecell" data-type="freecell" data-index="1"></div>
+          <div class="cell-slot freecell" data-type="freecell" data-index="2"></div>
+          <div class="cell-slot freecell" data-type="freecell" data-index="3"></div>
+          <div class="cell-slot-divider"></div>
+          <div class="cell-slot homecell" data-type="homecell" data-index="0" data-suit="hearts"></div>
+          <div class="cell-slot homecell" data-type="homecell" data-index="1" data-suit="clubs"></div>
+          <div class="cell-slot homecell" data-type="homecell" data-index="2" data-suit="diamonds"></div>
+          <div class="cell-slot homecell" data-type="homecell" data-index="3" data-suit="spades"></div>
+        </div>
+
+        <!-- タブロー列 (場札8列) -->
+        <div class="tableau-row">
+          <div class="tableau-column" data-type="tableau" data-index="0"></div>
+          <div class="tableau-column" data-type="tableau" data-index="1"></div>
+          <div class="tableau-column" data-type="tableau" data-index="2"></div>
+          <div class="tableau-column" data-type="tableau" data-index="3"></div>
+          <div class="tableau-column" data-type="tableau" data-index="4"></div>
+          <div class="tableau-column" data-type="tableau" data-index="5"></div>
+          <div class="tableau-column" data-type="tableau" data-index="6"></div>
+          <div class="tableau-column" data-type="tableau" data-index="7"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ランキングサイドバー (右) -->
+    <div id="sidebar-ranking">
+      <div class="sidebar-header">
+        <div class="sidebar-title">
+          <span class="icon">🏆</span> 連勝ランキング
+        </div>
+        <div class="player-profile-box">
+          <div class="profile-label">
+            <span>プレイヤーネーム</span>
+            <span id="save-status" style="color: #4CAF50; opacity: 0; transition: opacity 0.3s;">保存済</span>
+          </div>
+          <input type="text" id="player-name-input" class="player-name-input" placeholder="ゲスト" maxlength="12">
+        </div>
+      </div>
+
+      <div class="ranking-list-wrap">
+        <table class="ranking-table">
+          <thead>
+            <tr>
+              <th style="width: 50px;">順位</th>
+              <th>プレイヤー</th>
+              <th style="width: 70px; text-align: right;">連勝数</th>
+            </tr>
+          </thead>
+          <tbody id="ranking-tbody">
+            <tr>
+              <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 24px 0;">読み込み中...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 勝利モーダル -->
+  <div id="win-modal" class="overlay-modal">
+    <div class="modal-content">
+      <div class="modal-title" style="color: #4CAF50;">🎉 CONGRATULATIONS!</div>
+      <p style="color: var(--text-muted); font-size: 14px;">見事にクリアしました！</p>
+      <div class="modal-streak-count" id="modal-streak-val">1 連勝</div>
+      <button id="btn-next-game" class="btn-action" style="padding: 12px 28px; font-size: 15px;">次のゲームをプレイ</button>
+    </div>
+  </div>
+
+  <!-- 手詰まりモーダル -->
+  <div id="gameover-modal" class="overlay-modal">
+    <div class="modal-content">
+      <div class="modal-title" style="color: #ff5252;">⚠️ 手詰まり</div>
+      <p style="color: var(--text-muted); font-size: 14px;">移動可能な手がありません。<br>連勝記録がリセットされました。</p>
+      <div style="margin: 20px 0; font-size: 24px; font-weight: 800; color: #888;">連勝: 0</div>
+      <button id="btn-retry-game" class="btn-action" style="padding: 12px 28px; font-size: 15px;">再挑戦する</button>
+    </div>
+  </div>
+
+  <script>
+    /* ==========================================================================
+       Freecell Game Core & Ranking Logic
+       ========================================================================== */
+
+    const RANKING_API_URL = "https://script.google.com/macros/s/AKfycbzIgOMcU1d9kMOfeDjmZmDFcoW8k1LIK0yZbNSCmokaFdb7JyMwa6mHKxxfkVlgaOEt/exec";
+    const STREAK_PREF_KEY = "FumiFreecell_WinStreak";
+    const IN_PROGRESS_KEY = "FumiFreecell_InProgress";
+    const PLAYER_NAME_KEY = "jigsaw_player_name";
+
+    // スート名・インデックス定義 (SUITS: clubs:0, diamonds:1, hearts:2, spades:3)
+    const SUITS = ['clubs', 'diamonds', 'hearts', 'spades'];
+    const HOME_SLOT_SUITS = [2, 0, 1, 3]; // 画面並び順: Hearts, Clubs, Diamonds, Spades
+    const RANK_NAMES = ['', 'ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'jack', 'queen', 'king'];
+
+    // ゲーム状態
+    let currentGameNumber = 1;
+    let currentWinStreak = 0;
+    let isGameCleared = false;
+    let isGameOver = false;
+
+    // ボードデータ: freecells[4], homecells[4], tableaus[8]
+    let state = {
+      freecells: [[], [], [], []],
+      homecells: [[], [], [], []],
+      tableaus: [[], [], [], [], [], [], [], []]
+    };
+
+    let visitedStates = new Set();
+
+    // 画面要素
+    const streakDisplay = document.getElementById('streak-display');
+    const gameNumberDisplay = document.getElementById('game-number-display');
+    const btnRestart = document.getElementById('btn-restart');
+    const playerNameInput = document.getElementById('player-name-input');
+    const saveStatus = document.getElementById('save-status');
+    const winModal = document.getElementById('win-modal');
+    const modalStreakVal = document.getElementById('modal-streak-val');
+    const btnNextGame = document.getElementById('btn-next-game');
+    const gameoverModal = document.getElementById('gameover-modal');
+    const btnRetryGame = document.getElementById('btn-retry-game');
+
+    // カード画像パス生成 (末尾に「2」があるカードは2付きを使用)
+    function getCardImagePath(suit, rank) {
+      const suitName = SUITS[suit];
+      const rankName = RANK_NAMES[rank];
+
+      // J(11), Q(12), K(13) および A(1)のスペードはCardSet2に「2」のイラスト版が存在
+      if (rank >= 11 && rank <= 13) {
+        return `Assets/Resource/CardSet2/${rankName}_of_${suitName}2.png`;
+      }
+      if (rank === 1 && suitName === 'spades') {
+        return `Assets/Resource/CardSet2/ace_of_spades2.png`;
+      }
+
+      return `Assets/Resource/CardSet2/${rankName}_of_${suitName}.png`;
+    }
+
+    // Windows FreeCell 互換乱数生成 (線形合同法)
+    function generateWindowsFreecellDeck(gameNumber) {
+      let seed = gameNumber;
+      function msRand() {
+        seed = (Math.imul(seed, 214013) + 2531011) & 0x7FFFFFFF;
+        return (seed >> 16) & 0x7FFF;
+      }
+
+      // 52枚初期化 (Club, Diamond, Heart, Spade の順、A〜K)
+      let initialCards = [];
+      for (let r = 1; r <= 13; r++) {
+        for (let s = 0; s < 4; s++) {
+          initialCards.push({ suit: s, rank: r });
+        }
+      }
+
+      let shuffled = [];
+      let cardsLeft = 52;
+      while (cardsLeft > 0) {
+        let randIndex = msRand() % cardsLeft;
+        shuffled.push(initialCards[randIndex]);
+        initialCards[randIndex] = initialCards[cardsLeft - 1];
+        cardsLeft--;
+      }
+      return shuffled;
+    }
+
+    // ゲーム初期化
+    function startNewGame(gameNum = null) {
+      winModal.classList.remove('active');
+      gameoverModal.classList.remove('active');
+      isGameCleared = false;
+      isGameOver = false;
+
+      // 前回のゲームがクリアされずに中断されていた場合は連勝リセット
+      if (localStorage.getItem(IN_PROGRESS_KEY) === '1') {
+        currentWinStreak = 0;
+        localStorage.setItem(STREAK_PREF_KEY, '0');
+      } else {
+        currentWinStreak = parseInt(localStorage.getItem(STREAK_PREF_KEY) || '0', 10);
+      }
+      localStorage.setItem(IN_PROGRESS_KEY, '1');
+      streakDisplay.textContent = currentWinStreak;
+
+      // ゲーム番号選出
+      if (gameNum === null) {
+        do {
+          currentGameNumber = Math.floor(Math.random() * 32000) + 1;
+        } while (currentGameNumber === 11982);
+      } else {
+        currentGameNumber = gameNum;
+      }
+      gameNumberDisplay.textContent = `#${currentGameNumber}`;
+
+      // ホルダー初期化
+      state.freecells = [[], [], [], []];
+      state.homecells = [[], [], [], []];
+      state.tableaus = [[], [], [], [], [], [], [], []];
+      visitedStates.clear();
+
+      // 配札
+      const deck = generateWindowsFreecellDeck(currentGameNumber);
+      for (let i = 0; i < 52; i++) {
+        const col = i % 8;
+        state.tableaus[col].push(deck[i]);
+      }
+
+      renderBoard();
+    }
+
+    // カード描画・DOM構築
+    function renderBoard() {
+      // 1. フリーセル
+      document.querySelectorAll('.cell-slot.freecell').forEach((slot, idx) => {
+        slot.innerHTML = '';
+        const cardData = state.freecells[idx][0];
+        if (cardData) {
+          const cardEl = createCardElement(cardData, 'freecell', idx, 0);
+          slot.appendChild(cardEl);
+        }
+      });
+
+      // 2. ホームセル
+      document.querySelectorAll('.cell-slot.homecell').forEach((slot, idx) => {
+        slot.innerHTML = '';
+        const cards = state.homecells[idx];
+        if (cards.length > 0) {
+          const topCard = cards[cards.length - 1];
+          const cardEl = createCardElement(topCard, 'homecell', idx, cards.length - 1);
+          slot.appendChild(cardEl);
+        }
+      });
+
+      // 3. タブロー (カードの数字とスートが綺麗に見えるように間隔を32pxに設定)
+      document.querySelectorAll('.tableau-column').forEach((colEl, colIdx) => {
+        colEl.innerHTML = '';
+        const cards = state.tableaus[colIdx];
+        const cardOverlap = 32;
+
+        cards.forEach((cardData, cardIdx) => {
+          const cardEl = createCardElement(cardData, 'tableau', colIdx, cardIdx);
+          cardEl.style.top = `${cardIdx * cardOverlap}px`;
+          colEl.appendChild(cardEl);
+        });
+      });
+    }
+
+    function createCardElement(cardData, containerType, containerIdx, cardIdx) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.dataset.suit = cardData.suit;
+      el.dataset.rank = cardData.rank;
+      el.dataset.containerType = containerType;
+      el.dataset.containerIdx = containerIdx;
+      el.dataset.cardIdx = cardIdx;
+
+      const img = document.createElement('img');
+      img.src = getCardImagePath(cardData.suit, cardData.rank);
+      img.alt = `${RANK_NAMES[cardData.rank]} of ${SUITS[cardData.suit]}`;
+      el.appendChild(img);
+
+      // イベント設定 (クリック・ドラッグ)
+      setupCardInteraction(el, cardData, containerType, containerIdx, cardIdx);
+      return el;
+    }
+
+    // 移動可能最大枚数計算
+    function getMaxMoveableCards(targetIsFreeTableau = false) {
+      let emptyFreecells = 0;
+      for (let i = 0; i < 4; i++) {
+        if (state.freecells[i].length === 0) emptyFreecells++;
+      }
+
+      let emptyTableaus = 0;
+      for (let i = 0; i < 8; i++) {
+        if (state.tableaus[i].length === 0) emptyTableaus++;
+      }
+      if (targetIsFreeTableau && emptyTableaus > 0) {
+        emptyTableaus -= 1;
+      }
+
+      return (emptyFreecells + 1) * Math.pow(2, emptyTableaus);
+    }
+
+    function isOppositeColor(suit1, suit2) {
+      const isRed1 = suit1 === 1 || suit1 === 2;
+      const isRed2 = suit2 === 1 || suit2 === 2;
+      return isRed1 !== isRed2;
+    }
+
+    function isValidSequence(cards) {
+      for (let i = 0; i < cards.length - 1; i++) {
+        if (!isOppositeColor(cards[i].suit, cards[i + 1].suit)) return false;
+        if (cards[i].rank !== cards[i + 1].rank + 1) return false;
+      }
+      return true;
+    }
+
+    // カード操作（ドラッグ＆クリック自動送り）
+    function setupCardInteraction(cardEl, cardData, containerType, containerIdx, cardIdx) {
+      let startX, startY;
+      let isDragging = false;
+      let dragCards = [];
+      let dragElements = [];
+
+      // クリックによる自動送り
+      cardEl.addEventListener('click', (e) => {
+        if (isDragging) return;
+        handleCardAutoClick(containerType, containerIdx, cardIdx);
+      });
+
+      // ポインタドラッグ (PC / スマホ共通)
+      cardEl.addEventListener('pointerdown', (e) => {
+        if (isGameCleared || isGameOver) return;
+        if (e.button !== 0) return;
+
+        // タブロー内の複数枚シーケンスチェック
+        if (containerType === 'tableau') {
+          const colCards = state.tableaus[containerIdx];
+          const movingCards = colCards.slice(cardIdx);
+          if (!isValidSequence(movingCards)) return;
+          dragCards = movingCards;
+        } else {
+          dragCards = [cardData];
+        }
+
+        startX = e.clientX;
+        startY = e.clientY;
+        cardEl.setPointerCapture(e.pointerId);
+
+        const onPointerMove = (me) => {
+          const dx = me.clientX - startX;
+          const dy = me.clientY - startY;
+          if (!isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+            isDragging = true;
+            // ドラッグ対象エレメント群の抽出
+            if (containerType === 'tableau') {
+              const colEl = cardEl.parentElement;
+              dragElements = Array.from(colEl.children).slice(cardIdx);
+            } else {
+              dragElements = [cardEl];
+            }
+            dragElements.forEach(el => el.classList.add('dragging'));
+          }
+
+          if (isDragging) {
+            dragElements.forEach((el, i) => {
+              el.style.transform = `translate(${dx}px, ${dy}px)`;
+              el.style.zIndex = 1000 + i;
+            });
+          }
+        };
+
+        const onPointerUp = (ue) => {
+          cardEl.releasePointerCapture(ue.pointerId);
+          cardEl.removeEventListener('pointermove', onPointerMove);
+          cardEl.removeEventListener('pointerup', onPointerUp);
+
+          if (isDragging) {
+            dragElements.forEach(el => {
+              el.classList.remove('dragging');
+              el.style.transform = '';
+              el.style.zIndex = '';
+            });
+
+            // ドロップ判定
+            handleDrop(ue.clientX, ue.clientY, containerType, containerIdx, cardIdx, dragCards);
+            setTimeout(() => { isDragging = false; }, 50);
+          }
+        };
+
+        cardEl.addEventListener('pointermove', onPointerMove);
+        cardEl.addEventListener('pointerup', onPointerUp);
+      });
+    }
+
+    // クリックによるスマート移動（Unity FreecellController.cs準拠）
+    function handleCardAutoClick(fromType, fromIdx, cardIdx) {
+      let cardsToMove = [];
+      if (fromType === 'tableau') {
+        const col = state.tableaus[fromIdx];
+        const moving = col.slice(cardIdx);
+        if (!isValidSequence(moving)) return;
+        cardsToMove = moving;
+      } else if (fromType === 'freecell') {
+        cardsToMove = [state.freecells[fromIdx][0]];
+      } else {
+        return;
+      }
+
+      if (!cardsToMove || cardsToMove.length === 0 || !cardsToMove[0]) return;
+      const bottomCard = cardsToMove[0];
+
+      // 1. 1枚のみの場合はホームセル優先
+      if (cardsToMove.length === 1) {
+        for (let h = 0; h < 4; h++) {
+          if (canMoveToHomecell(bottomCard, h)) {
+            animateAndMoveCards(cardsToMove, fromType, fromIdx, cardIdx, 'homecell', h);
+            return;
+          }
+        }
+      }
+
+      // 2. 場札（他のタブロー列）: 複数枚一括移動対応
+      for (let t = 0; t < 8; t++) {
+        if (fromType === 'tableau' && fromIdx === t) continue;
+        const isTargetEmpty = state.tableaus[t].length === 0;
+        const maxMove = getMaxMoveableCards(isTargetEmpty);
+
+        if (cardsToMove.length <= maxMove && canMoveToTableau(cardsToMove, t)) {
+          animateAndMoveCards(cardsToMove, fromType, fromIdx, cardIdx, 'tableau', t);
+          return;
+        }
+      }
+
+      // 3. フリーセル (1枚の場合のみ)
+      if (cardsToMove.length === 1 && fromType !== 'freecell') {
+        for (let f = 0; f < 4; f++) {
+          if (state.freecells[f].length === 0) {
+            animateAndMoveCards(cardsToMove, fromType, fromIdx, cardIdx, 'freecell', f);
+            return;
+          }
+        }
+      }
+    }
+
+    // ドロップ処理
+    function handleDrop(clientX, clientY, fromType, fromIdx, cardIdx, movingCards) {
+      // 画面上の全ターゲットスロットと交差判定
+      const targets = document.querySelectorAll('.cell-slot, .tableau-column');
+      let targetElement = null;
+
+      targets.forEach(slot => {
+        const rect = slot.getBoundingClientRect();
+        if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+          targetElement = slot;
+        }
+      });
+
+      if (!targetElement) return;
+
+      const toType = targetElement.dataset.type;
+      const toIdx = parseInt(targetElement.dataset.index, 10);
+
+      // 移動可否判定
+      if (toType === 'freecell') {
+        if (movingCards.length === 1 && state.freecells[toIdx].length === 0) {
+          animateAndMoveCards(movingCards, fromType, fromIdx, cardIdx, 'freecell', toIdx, true);
+        }
+      } else if (toType === 'homecell') {
+        if (movingCards.length === 1 && canMoveToHomecell(movingCards[0], toIdx)) {
+          animateAndMoveCards(movingCards, fromType, fromIdx, cardIdx, 'homecell', toIdx, true);
+        }
+      } else if (toType === 'tableau') {
+        if (fromType === 'tableau' && fromIdx === toIdx) return;
+        const isTargetEmpty = state.tableaus[toIdx].length === 0;
+        const maxMove = getMaxMoveableCards(isTargetEmpty);
+
+        if (movingCards.length <= maxMove && canMoveToTableau(movingCards, toIdx)) {
+          animateAndMoveCards(movingCards, fromType, fromIdx, cardIdx, 'tableau', toIdx, true);
+        }
+      }
+    }
+
+    function canMoveToHomecell(card, homeIdx) {
+      const requiredSuit = HOME_SLOT_SUITS[homeIdx];
+      if (card.suit !== requiredSuit) return false;
+
+      const home = state.homecells[homeIdx];
+      if (home.length === 0) {
+        return card.rank === 1; // Aのみ
+      } else {
+        const top = home[home.length - 1];
+        return card.rank === top.rank + 1;
+      }
+    }
+
+    function canMoveToTableau(cards, tableauIdx) {
+      const tableau = state.tableaus[tableauIdx];
+      const bottomMoving = cards[0];
+      if (tableau.length === 0) {
+        return true; // 任意のカード
+      } else {
+        const topCard = tableau[tableau.length - 1];
+        return isOppositeColor(topCard.suit, bottomMoving.suit) && topCard.rank === bottomMoving.rank + 1;
+      }
+    }
+
+    // 移動アニメーション (Unity AnimateCardsMove 0.15s EaseOutLerp準拠)
+    let isAnimating = false;
+
+    function animateAndMoveCards(cards, fromType, fromIdx, cardIdx, toType, toIdx, isDragDrop = false) {
+      if (isDragDrop) {
+        // ドラッグドロップ時は即時配置
+        executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx);
+        renderBoard();
+        checkVictory();
+        if (!isGameCleared) setTimeout(checkAutoMoveToHome, 120);
+        return;
+      }
+
+      isAnimating = true;
+
+      // 対象要素と目標位置の取得
+      let sourceElements = [];
+      if (fromType === 'tableau') {
+        const colEl = document.querySelectorAll('.tableau-column')[fromIdx];
+        sourceElements = Array.from(colEl.children).slice(cardIdx);
+      } else if (fromType === 'freecell') {
+        const fcEl = document.querySelectorAll('.cell-slot.freecell')[fromIdx];
+        sourceElements = Array.from(fcEl.children);
+      }
+
+      let targetRect;
+      let targetBaseY = 0;
+      let targetOverlap = 32;
+
+      if (toType === 'tableau') {
+        const toColEl = document.querySelectorAll('.tableau-column')[toIdx];
+        targetRect = toColEl.getBoundingClientRect();
+        targetBaseY = state.tableaus[toIdx].length * targetOverlap;
+      } else if (toType === 'homecell') {
+        const toHomeEl = document.querySelectorAll('.cell-slot.homecell')[toIdx];
+        targetRect = toHomeEl.getBoundingClientRect();
+      } else if (toType === 'freecell') {
+        const toFcEl = document.querySelectorAll('.cell-slot.freecell')[toIdx];
+        targetRect = toFcEl.getBoundingClientRect();
+      }
+
+      // 複製/フローティング要素でアニメーション
+      sourceElements.forEach((el, i) => {
+        const startRect = el.getBoundingClientRect();
+        const destX = targetRect.left - startRect.left;
+        const destY = (targetRect.top + targetBaseY + i * (toType === 'tableau' ? targetOverlap : 0)) - startRect.top;
+
+        el.style.transition = 'transform 0.15s cubic-bezier(0, 0, 0.2, 1)';
+        el.style.transform = `translate(${destX}px, ${destY}px)`;
+        el.style.zIndex = 5000 + i;
+      });
+
+      setTimeout(() => {
+        executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx);
+        renderBoard();
+        isAnimating = false;
+        checkVictory();
+
+        if (!isGameCleared) {
+          setTimeout(checkAutoMoveToHome, 100);
+        }
+      }, 150);
+    }
+
+    function executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx) {
+      let moved = [];
+      if (fromType === 'tableau') {
+        moved = state.tableaus[fromIdx].splice(cardIdx);
+      } else if (fromType === 'freecell') {
+        moved = state.freecells[fromIdx].splice(0, 1);
+      }
+
+      if (toType === 'tableau') {
+        state.tableaus[toIdx].push(...moved);
+      } else if (toType === 'freecell') {
+        state.freecells[toIdx].push(...moved);
+      } else if (toType === 'homecell') {
+        state.homecells[toIdx].push(...moved);
+      }
+    }
+
+    // Unity FreecellController.cs と完全一致の安全オートムーブ判定
+    function getHomecellHighestRank(suit) {
+      for (let h = 0; h < 4; h++) {
+        if (HOME_SLOT_SUITS[h] === suit) {
+          const home = state.homecells[h];
+          return home.length > 0 ? home[home.length - 1].rank : 0;
+        }
+      }
+      return 0;
+    }
+
+    function isSafeToAutoMove(card) {
+      // A(1) と 2 は無条件で安全
+      if (card.rank <= 2) return true;
+
+      // 3以上のカードは、「反対の色のカードで rank - 1」が両スートとも格納済みか
+      const isRed = (card.suit === 1 || card.suit === 2); // Diamonds:1, Hearts:2
+      const targetRank = card.rank - 1;
+
+      const spadesRank = getHomecellHighestRank(3);
+      const clubsRank = getHomecellHighestRank(0);
+      const heartsRank = getHomecellHighestRank(2);
+      const diamondsRank = getHomecellHighestRank(1);
+
+      if (isRed) {
+        return (spadesRank >= targetRank && clubsRank >= targetRank);
+      } else {
+        return (heartsRank >= targetRank && diamondsRank >= targetRank);
+      }
+    }
+
+    function checkAutoMoveToHome() {
+      if (isGameCleared || isGameOver || isAnimating) return;
+
+      // フリーセルからの移動チェック
+      for (let f = 0; f < 4; f++) {
+        if (state.freecells[f].length > 0) {
+          const card = state.freecells[f][0];
+          for (let h = 0; h < 4; h++) {
+            if (canMoveToHomecell(card, h) && isSafeToAutoMove(card)) {
+              animateAndMoveCards([card], 'freecell', f, 0, 'homecell', h);
+              return;
+            }
+          }
+        }
+      }
+
+      // タブロー末尾からの移動チェック
+      for (let t = 0; t < 8; t++) {
+        const col = state.tableaus[t];
+        if (col.length > 0) {
+          const card = col[col.length - 1];
+          for (let h = 0; h < 4; h++) {
+            if (canMoveToHomecell(card, h) && isSafeToAutoMove(card)) {
+              animateAndMoveCards([card], 'tableau', t, col.length - 1, 'homecell', h);
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // 勝利判定
+    function checkVictory() {
+      let totalHome = 0;
+      state.homecells.forEach(hc => totalHome += hc.length);
+
+      if (totalHome === 52) {
+        if (!isGameCleared) {
+          isGameCleared = true;
+          currentWinStreak++;
+          localStorage.setItem(STREAK_PREF_KEY, currentWinStreak.toString());
+          localStorage.setItem(IN_PROGRESS_KEY, '0'); // 中断フラグ解除
+          streakDisplay.textContent = currentWinStreak;
+
+          modalStreakVal.textContent = `${currentWinStreak} 連勝`;
+          winModal.classList.add('active');
+
+          // ランキング送信
+          submitStreakRanking(currentWinStreak);
+        }
+      }
+    }
+
+    /* ==========================================================================
+       ランキング通信 & プロフィール同期
+       ========================================================================== */
+
+    async function loadLeaderboard() {
+      const tbody = document.getElementById('ranking-tbody');
+      if (!tbody) return;
+
+      try {
+        const response = await fetch(`${RANKING_API_URL}?action=get_freecell_ranking&t=${Date.now()}`);
+        const data = await response.json();
+
+        if (data && data.records && data.records.length > 0) {
+          tbody.innerHTML = '';
+          data.records.slice(0, 10).forEach((row, idx) => {
+            const tr = document.createElement('tr');
+            const rankClass = idx === 0 ? 'rank-1' : (idx === 1 ? 'rank-2' : (idx === 2 ? 'rank-3' : ''));
+            tr.innerHTML = `
+              <td class="${rankClass}">${idx + 1}位</td>
+              <td style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px;">${row.name}</td>
+              <td style="text-align: right; font-weight: 800; color: var(--gold-color);">${row.streak} 連勝</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        } else {
+          tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 24px 0;">まだ連勝記録が<br>ありません。</td></tr>`;
+        }
+      } catch (e) {
+        console.warn("ランキング取得エラー (フォールバックローカル表示):", e);
+        // ローカルストレージからの表示
+        tbody.innerHTML = `
+          <tr>
+            <td class="rank-1">1位</td>
+            <td>${playerNameInput.value || 'あなた'}</td>
+            <td style="text-align: right; font-weight: 800; color: var(--gold-color);">${currentWinStreak} 連勝</td>
+          </tr>
+        `;
+      }
+    }
+
+    async function submitStreakRanking(streak) {
+      const playerName = playerNameInput.value.trim() || 'ゲスト';
+      const sendUrl = `${RANKING_API_URL}?action=add_freecell_streak&name=${encodeURIComponent(playerName)}&streak=${streak}&t=${Date.now()}`;
+      try {
+        await fetch(sendUrl);
+        await loadLeaderboard();
+      } catch (e) {
+        console.error("ランキング送信エラー:", e);
+      }
+    }
+
+    // 初期化とバインド
+    document.addEventListener('DOMContentLoaded', () => {
+      // プレイヤーネーム復元
+      const savedName = localStorage.getItem(PLAYER_NAME_KEY) || 'ゲスト';
+      playerNameInput.value = savedName;
+
+      playerNameInput.addEventListener('input', () => {
+        localStorage.setItem(PLAYER_NAME_KEY, playerNameInput.value.trim());
+        saveStatus.style.opacity = '1';
+        setTimeout(() => { saveStatus.style.opacity = '0'; }, 1000);
+      });
+
+      // ポータルTOPリンク調整
+      const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      document.getElementById('btn-back-portal').href = isLocalHost ? "../FumiPortal/index.html" : "https://fumiakinx.github.io/";
+
+      btnRestart.addEventListener('click', () => {
+        if (!isGameCleared) {
+          // リスタート時は連勝リセット
+          localStorage.setItem(IN_PROGRESS_KEY, '1');
+          localStorage.setItem(STREAK_PREF_KEY, '0');
+        }
+        startNewGame();
+      });
+
+      btnNextGame.addEventListener('click', () => {
+        startNewGame();
+      });
+
+      btnRetryGame.addEventListener('click', () => {
+        startNewGame();
+      });
+
+      window.addEventListener('resize', () => {
+        renderBoard();
+      });
+
+      // ゲーム開始
+      startNewGame();
+      loadLeaderboard();
+    });
+  </script>
+</body>
+</html>
