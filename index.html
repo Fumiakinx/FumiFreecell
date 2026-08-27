@@ -772,13 +772,13 @@
 
       // クリックによる自動送り
       cardEl.addEventListener('click', (e) => {
-        if (isDragging) return;
+        if (isDragging || isAnimating) return;
         handleCardAutoClick(containerType, containerIdx, cardIdx);
       });
 
       // ポインタドラッグ (PC / スマホ共通)
       cardEl.addEventListener('pointerdown', (e) => {
-        if (isGameCleared || isGameOver) return;
+        if (isGameCleared || isGameOver || isAnimating) return;
         if (e.button !== 0) return;
 
         // タブロー内の複数枚シーケンスチェック
@@ -796,6 +796,7 @@
         cardEl.setPointerCapture(e.pointerId);
 
         const onPointerMove = (me) => {
+          if (isAnimating) return;
           const dx = me.clientX - startX;
           const dy = me.clientY - startY;
           if (!isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
@@ -958,7 +959,6 @@
 
     function animateAndMoveCards(cards, fromType, fromIdx, cardIdx, toType, toIdx, isDragDrop = false) {
       if (isDragDrop) {
-        // ドラッグドロップ時は即時配置
         executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx);
         renderBoard();
         checkVictory();
@@ -966,55 +966,103 @@
         return;
       }
 
+      if (isAnimating) return;
       isAnimating = true;
 
-      // 対象要素と目標位置の取得
+      // 移動元・移動先の要素を取得
       let sourceElements = [];
       if (fromType === 'tableau') {
         const colEl = document.querySelectorAll('.tableau-column')[fromIdx];
-        sourceElements = Array.from(colEl.children).slice(cardIdx);
+        if (colEl) sourceElements = Array.from(colEl.children).slice(cardIdx);
       } else if (fromType === 'freecell') {
         const fcEl = document.querySelectorAll('.cell-slot.freecell')[fromIdx];
-        sourceElements = Array.from(fcEl.children);
+        if (fcEl) sourceElements = Array.from(fcEl.children);
       }
 
-      let targetRect;
+      let targetRect = null;
       let targetBaseY = 0;
-      let targetOverlap = 32;
+      const targetOverlap = 32;
 
       if (toType === 'tableau') {
         const toColEl = document.querySelectorAll('.tableau-column')[toIdx];
-        targetRect = toColEl.getBoundingClientRect();
-        targetBaseY = state.tableaus[toIdx].length * targetOverlap;
+        if (toColEl) {
+          targetRect = toColEl.getBoundingClientRect();
+          targetBaseY = state.tableaus[toIdx].length * targetOverlap;
+        }
       } else if (toType === 'homecell') {
         const toHomeEl = document.querySelectorAll('.cell-slot.homecell')[toIdx];
-        targetRect = toHomeEl.getBoundingClientRect();
+        if (toHomeEl) targetRect = toHomeEl.getBoundingClientRect();
       } else if (toType === 'freecell') {
         const toFcEl = document.querySelectorAll('.cell-slot.freecell')[toIdx];
-        targetRect = toFcEl.getBoundingClientRect();
+        if (toFcEl) targetRect = toFcEl.getBoundingClientRect();
       }
 
-      // 複製/フローティング要素でアニメーション
+      if (!targetRect || sourceElements.length === 0) {
+        executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx);
+        renderBoard();
+        isAnimating = false;
+        checkVictory();
+        if (!isGameCleared) setTimeout(checkAutoMoveToHome, 120);
+        return;
+      }
+
+      // アニメーション用フローティングレイヤーを作成
+      const floatingContainer = document.createElement('div');
+      floatingContainer.style.position = 'fixed';
+      floatingContainer.style.top = '0';
+      floatingContainer.style.left = '0';
+      floatingContainer.style.width = '100vw';
+      floatingContainer.style.height = '100vh';
+      floatingContainer.style.pointerEvents = 'none';
+      floatingContainer.style.zIndex = '99999';
+      document.body.appendChild(floatingContainer);
+
+      const animClones = [];
+
       sourceElements.forEach((el, i) => {
         const startRect = el.getBoundingClientRect();
-        const destX = targetRect.left - startRect.left;
-        const destY = (targetRect.top + targetBaseY + i * (toType === 'tableau' ? targetOverlap : 0)) - startRect.top;
+        const clone = el.cloneNode(true);
+        clone.style.position = 'absolute';
+        clone.style.left = `${startRect.left}px`;
+        clone.style.top = `${startRect.top}px`;
+        clone.style.width = `${startRect.width}px`;
+        clone.style.height = `${startRect.height}px`;
+        clone.style.margin = '0';
+        clone.style.transition = 'transform 0.15s cubic-bezier(0, 0, 0.2, 1)';
+        clone.style.transform = 'translate(0px, 0px)';
+        clone.style.zIndex = `${1000 + i}`;
 
-        el.style.transition = 'transform 0.15s cubic-bezier(0, 0, 0.2, 1)';
-        el.style.transform = `translate(${destX}px, ${destY}px)`;
-        el.style.zIndex = 5000 + i;
+        floatingContainer.appendChild(clone);
+        animClones.push({
+          clone: clone,
+          destX: targetRect.left - startRect.left,
+          destY: (targetRect.top + targetBaseY + i * (toType === 'tableau' ? targetOverlap : 0)) - startRect.top
+        });
+
+        // 元要素を一時非表示
+        el.style.visibility = 'hidden';
+      });
+
+      // 1フレーム後に目標位置へ移動開始
+      requestAnimationFrame(() => {
+        animClones.forEach(item => {
+          item.clone.style.transform = `translate(${item.destX}px, ${item.destY}px)`;
+        });
       });
 
       setTimeout(() => {
+        if (floatingContainer && floatingContainer.parentNode) {
+          floatingContainer.parentNode.removeChild(floatingContainer);
+        }
         executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx);
         renderBoard();
         isAnimating = false;
         checkVictory();
 
         if (!isGameCleared) {
-          setTimeout(checkAutoMoveToHome, 100);
+          setTimeout(checkAutoMoveToHome, 80);
         }
-      }, 150);
+      }, 160);
     }
 
     function executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx) {
