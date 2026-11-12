@@ -922,6 +922,23 @@
         }
         clickCycleTargets = [];
 
+        const addHomecellTargets = () => {
+          if (cardsToMove.length !== 1) return;
+          for (let h = 0; h < 4; h++) {
+            if (fromType === 'homecell' && fromIdx === h) continue;
+            if (canMoveToHomecell(leadCard, h)) {
+              clickCycleTargets.push({ type: 'homecell', idx: h });
+            }
+          }
+        };
+
+        const isAcePrioritized = (cardsToMove.length === 1 && leadCard.rank === 1 && fromType !== 'homecell');
+
+        // エースは格納エリア（ホームセル）を最優先にする
+        if (isAcePrioritized) {
+          addHomecellTargets();
+        }
+
         // 1. カードが置かれているタブロー列（連結先を最優先）
         for (let t = 0; t < 8; t++) {
           if (fromType === 'tableau' && fromIdx === t) continue;
@@ -956,14 +973,9 @@
           }
         }
 
-        // 4. ホームセル / 右上貯蔵 (1枚の場合・候補の一番最後)
-        if (cardsToMove.length === 1) {
-          for (let h = 0; h < 4; h++) {
-            if (fromType === 'homecell' && fromIdx === h) continue;
-            if (canMoveToHomecell(leadCard, h)) {
-              clickCycleTargets.push({ type: 'homecell', idx: h });
-            }
-          }
+        // 4. ホームセル / 右上貯蔵 (エース以外は候補の一番最後)
+        if (!isAcePrioritized) {
+          addHomecellTargets();
         }
 
         if (clickCycleTargets.length === 0) {
