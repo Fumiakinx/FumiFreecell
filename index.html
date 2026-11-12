@@ -587,11 +587,13 @@
     let lastClickedCard = null; // { suit, rank }
     let clickCycleTargets = []; // [{ type, idx }, ...]
     let clickCycleIndex = 0;
+    let lastClickMoveContext = null; // { fromType, fromIdx, toType, toIdx, count }
 
     function resetClickCycle() {
       lastClickedCard = null;
       clickCycleTargets = [];
       clickCycleIndex = 0;
+      lastClickMoveContext = null;
     }
 
     function isSameCard(a, b) {
@@ -707,6 +709,7 @@
         state.tableaus[col].push(deck[i]);
       }
 
+      visitedStates.add(getBoardStateKey());
       renderBoard();
     }
 
@@ -836,6 +839,7 @@
           const dy = me.clientY - startY;
           if (!isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
             isDragging = true;
+            if (lastClickedCard) visitedStates.add(getBoardStateKey());
             resetClickCycle();
             // ドラッグ対象エレメント群の抽出
             if (containerType === 'tableau') {
@@ -913,30 +917,46 @@
       );
 
       if (!isSameCardCycle) {
+        if (lastClickedCard) {
+          visitedStates.add(getBoardStateKey());
+        }
         clickCycleTargets = [];
 
-        // 1. 場札（他のタブロー列）: 複数枚一括移動対応
+        // 1. カードが置かれているタブロー列（連結先を最優先）
         for (let t = 0; t < 8; t++) {
           if (fromType === 'tableau' && fromIdx === t) continue;
-          const isTargetEmpty = state.tableaus[t].length === 0;
-          const maxMove = getMaxMoveableCards(isTargetEmpty);
-
+          if (state.tableaus[t].length === 0) continue;
+          const maxMove = getMaxMoveableCards(false);
           if (cardsToMove.length <= maxMove && canMoveToTableau(cardsToMove, t)) {
             clickCycleTargets.push({ type: 'tableau', idx: t });
           }
         }
 
-        // 2. フリーセル (1枚の場合)
-        if (cardsToMove.length === 1) {
-          for (let f = 0; f < 4; f++) {
-            if (fromType === 'freecell' && fromIdx === f) continue;
-            if (state.freecells[f].length === 0) {
-              clickCycleTargets.push({ type: 'freecell', idx: f });
+        // 2. 空のタブロー列（最初の1つだけ、かつ列全体の無意味移動は除外）
+        if (!(fromType === 'tableau' && cardIdx === 0)) {
+          for (let t = 0; t < 8; t++) {
+            if (fromType === 'tableau' && fromIdx === t) continue;
+            if (state.tableaus[t].length === 0) {
+              const maxMove = getMaxMoveableCards(true);
+              if (cardsToMove.length <= maxMove) {
+                clickCycleTargets.push({ type: 'tableau', idx: t });
+                break;
+              }
             }
           }
         }
 
-        // 3. ホームセル / 右上貯蔵 (1枚の場合・候補の一番最後)
+        // 3. フリーセル (1枚・フリーセル間移動なし・最初の空き1つだけ)
+        if (cardsToMove.length === 1 && fromType !== 'freecell') {
+          for (let f = 0; f < 4; f++) {
+            if (state.freecells[f].length === 0) {
+              clickCycleTargets.push({ type: 'freecell', idx: f });
+              break;
+            }
+          }
+        }
+
+        // 4. ホームセル / 右上貯蔵 (1枚の場合・候補の一番最後)
         if (cardsToMove.length === 1) {
           for (let h = 0; h < 4; h++) {
             if (fromType === 'homecell' && fromIdx === h) continue;
@@ -960,6 +980,14 @@
       }
 
       const target = clickCycleTargets[clickCycleIndex];
+      const origin = clickCycleTargets[clickCycleTargets.length - 1];
+      lastClickMoveContext = {
+        fromType: origin.type,
+        fromIdx: origin.idx,
+        toType: target.type,
+        toIdx: target.idx,
+        count: cardsToMove.length
+      };
       animateAndMoveCards(cardsToMove, fromType, fromIdx, cardIdx, target.type, target.idx);
     }
 
@@ -1027,11 +1055,22 @@
 
     // 移動アニメーション（通常移動・自動高速移動を切り替え）
     function animateAndMoveCards(cards, fromType, fromIdx, cardIdx, toType, toIdx, isDragDrop = false, isAutoMove = false) {
-      if (isDragDrop) {
+      const completeMove = () => {
         executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx);
         renderBoard();
+        isAnimating = false;
         checkVictory();
-        if (!isGameCleared) checkAutoMoveToHome();
+        if (!isGameCleared) {
+          checkAutoMoveToHome();
+          if (!isAnimating) {
+            checkGameOver();
+          }
+        }
+      };
+
+      if (isDragDrop) {
+        lastClickMoveContext = null;
+        completeMove();
         return;
       }
 
@@ -1070,11 +1109,7 @@
       }
 
       if (!targetRect || sourceElements.length === 0) {
-        executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx);
-        renderBoard();
-        isAnimating = false;
-        checkVictory();
-        if (!isGameCleared) checkAutoMoveToHome();
+        completeMove();
         return;
       }
 
@@ -1129,14 +1164,7 @@
 
       activeAnimTimeout = setTimeout(() => {
         cleanupAnimationLayer();
-        executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx);
-        renderBoard();
-        isAnimating = false;
-        checkVictory();
-
-        if (!isGameCleared) {
-          checkAutoMoveToHome();
-        }
+        completeMove();
       }, durationMs + 10);
     }
 
@@ -1241,6 +1269,160 @@
           // ランキング送信
           submitStreakRanking(currentWinStreak);
         }
+      }
+    }
+
+    // 手詰まり（千日手を含む）判定
+    function getBoardStateKey() {
+      const formatCards = (arr) => arr.map(c => `${c.suit}_${c.rank}`).join(',');
+      const f = state.freecells.map((c, i) => `F${i}:${formatCards(c)}`).join(';');
+      const h = state.homecells.map((c, i) => `H${i}:${formatCards(c)}`).join(';');
+      const t = state.tableaus.map((c, i) => `T${i}:${formatCards(c)}`).join(';');
+      return `${f}|${h}|${t}`;
+    }
+
+    function getContainerArray(type, idx) {
+      if (type === 'tableau') return state.tableaus[idx];
+      if (type === 'freecell') return state.freecells[idx];
+      if (type === 'homecell') return state.homecells[idx];
+      return null;
+    }
+
+    function moveTopCardsSync(srcType, srcIdx, dstType, dstIdx, count) {
+      const src = getContainerArray(srcType, srcIdx);
+      const dst = getContainerArray(dstType, dstIdx);
+      if (!src || !dst || src.length < count) return false;
+      const moved = src.splice(src.length - count, count);
+      dst.push(...moved);
+      return true;
+    }
+
+    function hasAnyProgressiveMoves() {
+      const trySingleMove = (srcArr, dstArr) => {
+        const card = srcArr.pop();
+        dstArr.push(card);
+        const nextKey = getBoardStateKey();
+        dstArr.pop();
+        srcArr.push(card);
+        return !visitedStates.has(nextKey);
+      };
+
+      // 1. ホームセルへ移動可能なカードがある場合（未訪問局面への進展手）
+      for (let f = 0; f < 4; f++) {
+        if (state.freecells[f].length > 0) {
+          const card = state.freecells[f][0];
+          for (let h = 0; h < 4; h++) {
+            if (canMoveToHomecell(card, h) && trySingleMove(state.freecells[f], state.homecells[h])) return true;
+          }
+        }
+      }
+      for (let t = 0; t < 8; t++) {
+        const col = state.tableaus[t];
+        if (col.length > 0) {
+          const card = col[col.length - 1];
+          for (let h = 0; h < 4; h++) {
+            if (canMoveToHomecell(card, h) && trySingleMove(col, state.homecells[h])) return true;
+          }
+        }
+      }
+
+      // 2. 空きフリーセルへの退避手をシミュレート
+      for (let f = 0; f < 4; f++) {
+        if (state.freecells[f].length === 0) {
+          for (let t = 0; t < 8; t++) {
+            const col = state.tableaus[t];
+            if (col.length > 0 && trySingleMove(col, state.freecells[f])) return true;
+          }
+          break; // 空きフリーセルは1つ確認すれば十分
+        }
+      }
+
+      // 3. フリーセルから場札への移動をシミュレート
+      for (let f = 0; f < 4; f++) {
+        if (state.freecells[f].length > 0) {
+          const card = state.freecells[f][0];
+          for (let t = 0; t < 8; t++) {
+            if (canMoveToTableau([card], t) && trySingleMove(state.freecells[f], state.tableaus[t])) return true;
+          }
+        }
+      }
+
+      // 4. 場札間での移動をシミュレート
+      for (let i = 0; i < 8; i++) {
+        const fromCol = state.tableaus[i];
+        if (fromCol.length === 0) continue;
+
+        for (let cardIdx = 0; cardIdx < fromCol.length; cardIdx++) {
+          const subSeq = fromCol.slice(cardIdx);
+          if (!isValidSequence(subSeq)) continue;
+
+          for (let j = 0; j < 8; j++) {
+            if (i === j) continue;
+            const toCol = state.tableaus[j];
+
+            if (toCol.length === 0 && cardIdx === 0) continue;
+
+            const maxMove = getMaxMoveableCards(toCol.length === 0);
+            if (subSeq.length <= maxMove && canMoveToTableau(subSeq, j)) {
+              fromCol.splice(cardIdx);
+              toCol.push(...subSeq);
+              const nextKey = getBoardStateKey();
+              toCol.splice(toCol.length - subSeq.length);
+              fromCol.push(...subSeq);
+              if (!visitedStates.has(nextKey)) return true;
+            }
+          }
+        }
+      }
+
+      return false;
+    }
+
+    function triggerGameOver() {
+      if (isGameCleared || isGameOver) return;
+      isGameOver = true;
+      currentWinStreak = 0;
+      localStorage.setItem(STREAK_PREF_KEY, '0');
+      localStorage.setItem(IN_PROGRESS_KEY, '0');
+      streakDisplay.textContent = '0';
+      gameoverModal.classList.add('active');
+    }
+
+    function checkGameOver() {
+      if (isGameCleared || isGameOver) return;
+
+      const currentKey = getBoardStateKey();
+      const isToggling = Boolean(lastClickedCard && lastClickMoveContext);
+
+      if (!isToggling) {
+        visitedStates.add(currentKey);
+        if (!hasAnyProgressiveMoves()) {
+          triggerGameOver();
+        }
+        return;
+      }
+
+      // クリックトグルの仮移動中に誤って千日手判定しないよう、元位置へ戻した際の進展余地も確認する
+      const wasAlreadyVisited = visitedStates.has(currentKey);
+      visitedStates.add(currentKey);
+
+      let canProgress = hasAnyProgressiveMoves();
+      if (!canProgress) {
+        const { fromType, fromIdx, toType, toIdx, count } = lastClickMoveContext;
+        if (fromType !== toType || fromIdx !== toIdx) {
+          if (moveTopCardsSync(toType, toIdx, fromType, fromIdx, count)) {
+            canProgress = hasAnyProgressiveMoves();
+            moveTopCardsSync(fromType, fromIdx, toType, toIdx, count);
+          }
+        }
+      }
+
+      if (!wasAlreadyVisited) {
+        visitedStates.delete(currentKey);
+      }
+
+      if (!canProgress) {
+        triggerGameOver();
       }
     }
 
