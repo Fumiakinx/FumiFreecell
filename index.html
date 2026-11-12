@@ -577,6 +577,38 @@
 
     let visitedStates = new Set();
 
+    // アニメーション・クリックトグル管理
+    const NORMAL_MOVE_DURATION_MS = 150;
+    const AUTO_MOVE_DURATION_MS = 48;
+    let isAnimating = false;
+    let activeAnimTimeout = null;
+    let activeFloatingLayer = null;
+
+    let lastClickedCard = null; // { suit, rank }
+    let clickCycleTargets = []; // [{ type, idx }, ...]
+    let clickCycleIndex = 0;
+
+    function resetClickCycle() {
+      lastClickedCard = null;
+      clickCycleTargets = [];
+      clickCycleIndex = 0;
+    }
+
+    function isSameCard(a, b) {
+      return Boolean(a && b && a.suit === b.suit && a.rank === b.rank);
+    }
+
+    function cleanupAnimationLayer() {
+      if (activeAnimTimeout !== null) {
+        clearTimeout(activeAnimTimeout);
+        activeAnimTimeout = null;
+      }
+      if (activeFloatingLayer && activeFloatingLayer.parentNode) {
+        activeFloatingLayer.parentNode.removeChild(activeFloatingLayer);
+      }
+      activeFloatingLayer = null;
+    }
+
     // 画面要素
     const streakDisplay = document.getElementById('streak-display');
     const gameNumberDisplay = document.getElementById('game-number-display');
@@ -634,6 +666,9 @@
 
     // ゲーム初期化
     function startNewGame(gameNum = null) {
+      cleanupAnimationLayer();
+      isAnimating = false;
+      resetClickCycle();
       winModal.classList.remove('active');
       gameoverModal.classList.remove('active');
       isGameCleared = false;
@@ -772,7 +807,7 @@
 
       // クリックによる自動送り
       cardEl.addEventListener('click', (e) => {
-        if (isDragging || isAnimating) return;
+        if (isDragging || isAnimating || isGameCleared || isGameOver) return;
         handleCardAutoClick(containerType, containerIdx, cardIdx);
       });
 
@@ -801,6 +836,7 @@
           const dy = me.clientY - startY;
           if (!isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
             isDragging = true;
+            resetClickCycle();
             // ドラッグ対象エレメント群の抽出
             if (containerType === 'tableau') {
               const colEl = cardEl.parentElement;
@@ -842,54 +878,89 @@
       });
     }
 
-    // クリックによるスマート移動（Unity FreecellController.cs準拠）
+    // クリックによる全候補トグル移動（Unity FreecellController.cs準拠）
     function handleCardAutoClick(fromType, fromIdx, cardIdx) {
       let cardsToMove = [];
       if (fromType === 'tableau') {
         const col = state.tableaus[fromIdx];
         const moving = col.slice(cardIdx);
-        if (!isValidSequence(moving)) return;
+        if (!isValidSequence(moving)) {
+          resetClickCycle();
+          return;
+        }
         cardsToMove = moving;
       } else if (fromType === 'freecell') {
+        if (state.freecells[fromIdx].length === 0) return;
         cardsToMove = [state.freecells[fromIdx][0]];
+      } else if (fromType === 'homecell') {
+        const home = state.homecells[fromIdx];
+        if (home.length === 0 || cardIdx !== home.length - 1) return;
+        cardsToMove = [home[home.length - 1]];
       } else {
         return;
       }
 
       if (!cardsToMove || cardsToMove.length === 0 || !cardsToMove[0]) return;
-      const bottomCard = cardsToMove[0];
+      const leadCard = cardsToMove[0];
 
-      // 1. 1枚のみの場合はホームセル優先
-      if (cardsToMove.length === 1) {
-        for (let h = 0; h < 4; h++) {
-          if (canMoveToHomecell(bottomCard, h)) {
-            animateAndMoveCards(cardsToMove, fromType, fromIdx, cardIdx, 'homecell', h);
-            return;
+      const currentTarget = clickCycleTargets[clickCycleIndex];
+      const isSameCardCycle = (
+        isSameCard(lastClickedCard, leadCard) &&
+        clickCycleTargets.length > 1 &&
+        currentTarget &&
+        currentTarget.type === fromType &&
+        currentTarget.idx === fromIdx
+      );
+
+      if (!isSameCardCycle) {
+        clickCycleTargets = [];
+
+        // 1. 場札（他のタブロー列）: 複数枚一括移動対応
+        for (let t = 0; t < 8; t++) {
+          if (fromType === 'tableau' && fromIdx === t) continue;
+          const isTargetEmpty = state.tableaus[t].length === 0;
+          const maxMove = getMaxMoveableCards(isTargetEmpty);
+
+          if (cardsToMove.length <= maxMove && canMoveToTableau(cardsToMove, t)) {
+            clickCycleTargets.push({ type: 'tableau', idx: t });
           }
         }
-      }
 
-      // 2. 場札（他のタブロー列）: 複数枚一括移動対応
-      for (let t = 0; t < 8; t++) {
-        if (fromType === 'tableau' && fromIdx === t) continue;
-        const isTargetEmpty = state.tableaus[t].length === 0;
-        const maxMove = getMaxMoveableCards(isTargetEmpty);
+        // 2. フリーセル (1枚の場合)
+        if (cardsToMove.length === 1) {
+          for (let f = 0; f < 4; f++) {
+            if (fromType === 'freecell' && fromIdx === f) continue;
+            if (state.freecells[f].length === 0) {
+              clickCycleTargets.push({ type: 'freecell', idx: f });
+            }
+          }
+        }
 
-        if (cardsToMove.length <= maxMove && canMoveToTableau(cardsToMove, t)) {
-          animateAndMoveCards(cardsToMove, fromType, fromIdx, cardIdx, 'tableau', t);
+        // 3. ホームセル / 右上貯蔵 (1枚の場合・候補の一番最後)
+        if (cardsToMove.length === 1) {
+          for (let h = 0; h < 4; h++) {
+            if (fromType === 'homecell' && fromIdx === h) continue;
+            if (canMoveToHomecell(leadCard, h)) {
+              clickCycleTargets.push({ type: 'homecell', idx: h });
+            }
+          }
+        }
+
+        if (clickCycleTargets.length === 0) {
+          resetClickCycle();
           return;
         }
+
+        // すべての移動候補を巡回した後に元の位置へ戻るよう末尾に追加
+        clickCycleTargets.push({ type: fromType, idx: fromIdx });
+        lastClickedCard = { suit: leadCard.suit, rank: leadCard.rank };
+        clickCycleIndex = 0;
+      } else {
+        clickCycleIndex = (clickCycleIndex + 1) % clickCycleTargets.length;
       }
 
-      // 3. フリーセル (1枚の場合のみ)
-      if (cardsToMove.length === 1 && fromType !== 'freecell') {
-        for (let f = 0; f < 4; f++) {
-          if (state.freecells[f].length === 0) {
-            animateAndMoveCards(cardsToMove, fromType, fromIdx, cardIdx, 'freecell', f);
-            return;
-          }
-        }
-      }
+      const target = clickCycleTargets[clickCycleIndex];
+      animateAndMoveCards(cardsToMove, fromType, fromIdx, cardIdx, target.type, target.idx);
     }
 
     // ドロップ処理
@@ -954,15 +1025,13 @@
       }
     }
 
-    // 移動アニメーション (Unity AnimateCardsMove 0.15s EaseOutLerp準拠)
-    let isAnimating = false;
-
-    function animateAndMoveCards(cards, fromType, fromIdx, cardIdx, toType, toIdx, isDragDrop = false) {
+    // 移動アニメーション（通常移動・自動高速移動を切り替え）
+    function animateAndMoveCards(cards, fromType, fromIdx, cardIdx, toType, toIdx, isDragDrop = false, isAutoMove = false) {
       if (isDragDrop) {
         executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx);
         renderBoard();
         checkVictory();
-        if (!isGameCleared) setTimeout(checkAutoMoveToHome, 120);
+        if (!isGameCleared) checkAutoMoveToHome();
         return;
       }
 
@@ -977,6 +1046,9 @@
       } else if (fromType === 'freecell') {
         const fcEl = document.querySelectorAll('.cell-slot.freecell')[fromIdx];
         if (fcEl) sourceElements = Array.from(fcEl.children);
+      } else if (fromType === 'homecell') {
+        const hcEl = document.querySelectorAll('.cell-slot.homecell')[fromIdx];
+        if (hcEl) sourceElements = Array.from(hcEl.children);
       }
 
       let targetRect = null;
@@ -1002,11 +1074,14 @@
         renderBoard();
         isAnimating = false;
         checkVictory();
-        if (!isGameCleared) setTimeout(checkAutoMoveToHome, 120);
+        if (!isGameCleared) checkAutoMoveToHome();
         return;
       }
 
+      const durationMs = isAutoMove ? AUTO_MOVE_DURATION_MS : NORMAL_MOVE_DURATION_MS;
+
       // アニメーション用フローティングレイヤーを作成
+      cleanupAnimationLayer();
       const floatingContainer = document.createElement('div');
       floatingContainer.style.position = 'fixed';
       floatingContainer.style.top = '0';
@@ -1016,6 +1091,7 @@
       floatingContainer.style.pointerEvents = 'none';
       floatingContainer.style.zIndex = '99999';
       document.body.appendChild(floatingContainer);
+      activeFloatingLayer = floatingContainer;
 
       const animClones = [];
 
@@ -1028,7 +1104,7 @@
         clone.style.width = `${startRect.width}px`;
         clone.style.height = `${startRect.height}px`;
         clone.style.margin = '0';
-        clone.style.transition = 'transform 0.15s cubic-bezier(0, 0, 0.2, 1)';
+        clone.style.transition = `transform ${durationMs / 1000}s cubic-bezier(0, 0, 0.2, 1)`;
         clone.style.transform = 'translate(0px, 0px)';
         clone.style.zIndex = `${1000 + i}`;
 
@@ -1043,26 +1119,25 @@
         el.style.visibility = 'hidden';
       });
 
-      // 1フレーム後に目標位置へ移動開始
+      // 初期位置レイアウト確定後に目標位置へ移動開始
+      floatingContainer.getBoundingClientRect();
       requestAnimationFrame(() => {
         animClones.forEach(item => {
           item.clone.style.transform = `translate(${item.destX}px, ${item.destY}px)`;
         });
       });
 
-      setTimeout(() => {
-        if (floatingContainer && floatingContainer.parentNode) {
-          floatingContainer.parentNode.removeChild(floatingContainer);
-        }
+      activeAnimTimeout = setTimeout(() => {
+        cleanupAnimationLayer();
         executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx);
         renderBoard();
         isAnimating = false;
         checkVictory();
 
         if (!isGameCleared) {
-          setTimeout(checkAutoMoveToHome, 80);
+          checkAutoMoveToHome();
         }
-      }, 160);
+      }, durationMs + 10);
     }
 
     function executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx) {
@@ -1071,6 +1146,8 @@
         moved = state.tableaus[fromIdx].splice(cardIdx);
       } else if (fromType === 'freecell') {
         moved = state.freecells[fromIdx].splice(0, 1);
+      } else if (fromType === 'homecell') {
+        moved = state.homecells[fromIdx].splice(cardIdx, 1);
       }
 
       if (toType === 'tableau') {
@@ -1116,16 +1193,23 @@
     function checkAutoMoveToHome() {
       if (isGameCleared || isGameOver || isAnimating) return;
 
+      const tryAutoMove = (card, fromType, fromIdx, cardIdx) => {
+        // クリックトグル中のカード自身は自動移動で即吸収しない
+        if (isSameCard(card, lastClickedCard)) return false;
+        for (let h = 0; h < 4; h++) {
+          if (canMoveToHomecell(card, h) && isSafeToAutoMove(card)) {
+            resetClickCycle();
+            animateAndMoveCards([card], fromType, fromIdx, cardIdx, 'homecell', h, false, true);
+            return true;
+          }
+        }
+        return false;
+      };
+
       // フリーセルからの移動チェック
       for (let f = 0; f < 4; f++) {
         if (state.freecells[f].length > 0) {
-          const card = state.freecells[f][0];
-          for (let h = 0; h < 4; h++) {
-            if (canMoveToHomecell(card, h) && isSafeToAutoMove(card)) {
-              animateAndMoveCards([card], 'freecell', f, 0, 'homecell', h);
-              return;
-            }
-          }
+          if (tryAutoMove(state.freecells[f][0], 'freecell', f, 0)) return;
         }
       }
 
@@ -1133,13 +1217,7 @@
       for (let t = 0; t < 8; t++) {
         const col = state.tableaus[t];
         if (col.length > 0) {
-          const card = col[col.length - 1];
-          for (let h = 0; h < 4; h++) {
-            if (canMoveToHomecell(card, h) && isSafeToAutoMove(card)) {
-              animateAndMoveCards([card], 'tableau', t, col.length - 1, 'homecell', h);
-              return;
-            }
-          }
+          if (tryAutoMove(col[col.length - 1], 'tableau', t, col.length - 1)) return;
         }
       }
     }
