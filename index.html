@@ -587,12 +587,14 @@
     let lastClickedCard = null; // { suit, rank }
     let clickCycleTargets = []; // [{ type, idx }, ...]
     let clickCycleIndex = 0;
+    let clickCycleOrigin = null; // { type, idx } | null
     let lastClickMoveContext = null; // { fromType, fromIdx, toType, toIdx, count }
 
     function resetClickCycle() {
       lastClickedCard = null;
       clickCycleTargets = [];
       clickCycleIndex = 0;
+      clickCycleOrigin = null;
       lastClickMoveContext = null;
     }
 
@@ -983,8 +985,25 @@
           return;
         }
 
-        // すべての移動候補を巡回した後に元の位置へ戻るよう末尾に追加
-        clickCycleTargets.push({ type: fromType, idx: fromIdx });
+        // フリーセルのルール上、元の位置へ戻せる場合のみ巡回末尾に追加する
+        let canReturnToOrigin = false;
+        if (fromType === 'freecell' || fromType === 'homecell') {
+          canReturnToOrigin = true;
+        } else if (fromType === 'tableau') {
+          if (cardIdx === 0) {
+            canReturnToOrigin = true;
+          } else {
+            const parentCard = state.tableaus[fromIdx][cardIdx - 1];
+            canReturnToOrigin = isOppositeColor(parentCard.suit, leadCard.suit) && parentCard.rank === leadCard.rank + 1;
+          }
+        }
+
+        if (canReturnToOrigin) {
+          clickCycleOrigin = { type: fromType, idx: fromIdx };
+          clickCycleTargets.push(clickCycleOrigin);
+        } else {
+          clickCycleOrigin = null;
+        }
         lastClickedCard = { suit: leadCard.suit, rank: leadCard.rank };
         clickCycleIndex = 0;
       } else {
@@ -992,14 +1011,13 @@
       }
 
       const target = clickCycleTargets[clickCycleIndex];
-      const origin = clickCycleTargets[clickCycleTargets.length - 1];
-      lastClickMoveContext = {
-        fromType: origin.type,
-        fromIdx: origin.idx,
+      lastClickMoveContext = clickCycleOrigin ? {
+        fromType: clickCycleOrigin.type,
+        fromIdx: clickCycleOrigin.idx,
         toType: target.type,
         toIdx: target.idx,
         count: cardsToMove.length
-      };
+      } : null;
       animateAndMoveCards(cardsToMove, fromType, fromIdx, cardIdx, target.type, target.idx);
     }
 
