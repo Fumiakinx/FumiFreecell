@@ -770,8 +770,6 @@
       img.alt = `${RANK_NAMES[cardData.rank]} of ${SUITS[cardData.suit]}`;
       el.appendChild(img);
 
-      // イベント設定 (クリック・ドラッグ)
-      setupCardInteraction(el, cardData, containerType, containerIdx, cardIdx);
       // イベント設定 (ホームセル格納済みカードは移動不可のため設定しない)
       if (containerType !== 'homecell') {
         setupCardInteraction(el, cardData, containerType, containerIdx, cardIdx);
@@ -906,10 +904,6 @@
       } else if (fromType === 'freecell') {
         if (state.freecells[fromIdx].length === 0) return;
         cardsToMove = [state.freecells[fromIdx][0]];
-      } else if (fromType === 'homecell') {
-        const home = state.homecells[fromIdx];
-        if (home.length === 0 || cardIdx !== home.length - 1) return;
-        cardsToMove = [home[home.length - 1]];
       } else {
         return;
       }
@@ -935,14 +929,12 @@
         const addHomecellTargets = () => {
           if (cardsToMove.length !== 1) return;
           for (let h = 0; h < 4; h++) {
-            if (fromType === 'homecell' && fromIdx === h) continue;
             if (canMoveToHomecell(leadCard, h)) {
               clickCycleTargets.push({ type: 'homecell', idx: h });
             }
           }
         };
 
-        const isAcePrioritized = (cardsToMove.length === 1 && leadCard.rank === 1 && fromType !== 'homecell');
         const isAcePrioritized = (cardsToMove.length === 1 && leadCard.rank === 1);
 
         // エースは格納エリア（ホームセル）を最優先にする
@@ -996,7 +988,6 @@
 
         // フリーセルのルール上、元の位置へ戻せる場合のみ巡回末尾に追加する
         let canReturnToOrigin = false;
-        if (fromType === 'freecell' || fromType === 'homecell') {
         if (fromType === 'freecell') {
           canReturnToOrigin = true;
         } else if (fromType === 'tableau') {
@@ -1130,9 +1121,6 @@
       } else if (fromType === 'freecell') {
         const fcEl = document.querySelectorAll('.cell-slot.freecell')[fromIdx];
         if (fcEl) sourceElements = Array.from(fcEl.children);
-      } else if (fromType === 'homecell') {
-        const hcEl = document.querySelectorAll('.cell-slot.homecell')[fromIdx];
-        if (hcEl) sourceElements = Array.from(hcEl.children);
       }
 
       let targetRect = null;
@@ -1219,8 +1207,6 @@
         moved = state.tableaus[fromIdx].splice(cardIdx);
       } else if (fromType === 'freecell') {
         moved = state.freecells[fromIdx].splice(0, 1);
-      } else if (fromType === 'homecell') {
-        moved = state.homecells[fromIdx].splice(cardIdx, 1);
       }
 
       if (toType === 'tableau') {
