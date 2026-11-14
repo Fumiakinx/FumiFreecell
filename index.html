@@ -247,6 +247,10 @@
       touch-action: none;
     }
 
+    .cell-slot.homecell .card {
+      cursor: default;
+    }
+
     .card img {
       width: 100%;
       height: 100%;
@@ -768,6 +772,10 @@
 
       // イベント設定 (クリック・ドラッグ)
       setupCardInteraction(el, cardData, containerType, containerIdx, cardIdx);
+      // イベント設定 (ホームセル格納済みカードは移動不可のため設定しない)
+      if (containerType !== 'homecell') {
+        setupCardInteraction(el, cardData, containerType, containerIdx, cardIdx);
+      }
       return el;
     }
 
@@ -935,6 +943,7 @@
         };
 
         const isAcePrioritized = (cardsToMove.length === 1 && leadCard.rank === 1 && fromType !== 'homecell');
+        const isAcePrioritized = (cardsToMove.length === 1 && leadCard.rank === 1);
 
         // エースは格納エリア（ホームセル）を最優先にする
         if (isAcePrioritized) {
@@ -988,6 +997,7 @@
         // フリーセルのルール上、元の位置へ戻せる場合のみ巡回末尾に追加する
         let canReturnToOrigin = false;
         if (fromType === 'freecell' || fromType === 'homecell') {
+        if (fromType === 'freecell') {
           canReturnToOrigin = true;
         } else if (fromType === 'tableau') {
           if (cardIdx === 0) {
@@ -1023,6 +1033,8 @@
 
     // ドロップ処理
     function handleDrop(clientX, clientY, fromType, fromIdx, cardIdx, movingCards) {
+      if (fromType === 'homecell') return;
+
       // 画面上の全ターゲットスロットと交差判定
       const targets = document.querySelectorAll('.cell-slot, .tableau-column');
       let targetElement = null;
@@ -1087,6 +1099,9 @@
     function animateAndMoveCards(cards, fromType, fromIdx, cardIdx, toType, toIdx, isDragDrop = false, isAutoMove = false) {
       const completeMove = () => {
         executeMoveData(fromType, fromIdx, cardIdx, toType, toIdx);
+        if (toType === 'homecell') {
+          resetClickCycle();
+        }
         renderBoard();
         isAnimating = false;
         checkVictory();
